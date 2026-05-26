@@ -1,0 +1,51 @@
+# Configuration file for Wave Race 64 (USA Rev 1) Recompilation.
+# ROM SHA-1: 508dfc2d4caa42b6f6de5263d0aed5e44ac7966a
+
+[input]
+entrypoint = 0x80000400
+# Paths are relative to the location of this config file.
+output_func_path = "../RecompiledFuncs"
+relocatable_sections_path = "overlays.us.rev1.txt"
+
+# Two input modes are supported by N64Recomp:
+#   1. ELF mode: provide an ELF from a decomp build (elf_path)
+#   2. Symbols TOML mode: provide a symbols file + ROM (symbols_file_path + rom_file_path)
+#
+# We will use symbols TOML mode once the symbols file is generated from the decomp.
+# TODO: Generate symbols TOML from decomp project at ../Wave-Race-64/
+symbols_file_path = "waverace64.us.rev1.syms.toml"
+rom_file_path = "../baserom.us.rev1.z64"
+
+# Wave Race 64 uses MIPS II (not MIPS III float mode)
+uses_mips3_float_mode = false
+
+[patches]
+# Functions to stub out (replace with empty return).
+# These typically include functions that directly manipulate RCP hardware
+# registers or access unmapped memory regions.
+stubs = [
+    # TODO: Identify functions that manipulate RCP status registers directly.
+    # Candidates from libultra:
+    # "osDpGetStatus",
+    # "osDpSetStatus",
+]
+
+# Functions to skip during recompilation.
+ignored = [
+    # TODO: Identify non-function symbols that the recompiler might mistake
+    # for functions (e.g., data labels in code sections).
+]
+
+# Single-instruction patches
+# Format: func = "function_name", vram = 0xADDRESS, value = 0xINSTRUCTION
+
+# TODO: Add patches as needed during testing. Common needs:
+# - Redirect audio DMA to cached addresses (kseg0 instead of kseg1)
+# - Disable RCP timeout detection
+# - Fix any direct hardware register access
+
+# Example (disabled):
+# [[patches.instruction]]
+# func = "some_function"
+# vram = 0x80XXXXXX
+# value = 0x00000000  # nop

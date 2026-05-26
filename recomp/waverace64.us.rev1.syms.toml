@@ -1,0 +1,170 @@
+# Wave Race 64 (USA Rev 1) Symbol File for N64Recomp
+#
+# This file defines all code sections and their functions for the recompiler.
+# Generated from the Wave Race 64 decomp project.
+#
+# Format reference (from N64Recomp source):
+#   [[section]]
+#   rom = 0x...        # ROM offset of section start
+#   vram = 0x...       # Virtual RAM address at runtime  
+#   size = ...         # Section size in bytes
+#   name = "..."       # Section name (must match overlay list)
+#
+#   [[section.functions]]
+#   name = "func_name"  # Function symbol name
+#   vram = 0x...        # Function VRAM address
+#   size = ...          # Function size in bytes
+#
+#   [[section.relocs]]  # Only for relocatable overlay sections
+#   vram = 0x...        # Address of instruction with relocation
+#   target_vram = 0x... # Target address of relocation
+#   type = "R_MIPS_HI16" | "R_MIPS_LO16" | "R_MIPS_26" | "R_MIPS_32"
+#
+# TODO: This file needs to be generated from the decomp project.
+# A script should be created to:
+#   1. Parse symbol_addrs.txt, libultra_symbols.txt, ovl_symbols.txt
+#   2. Determine function sizes from adjacent symbol addresses or ELF data
+#   3. Map functions to their correct sections (main code vs overlays)
+#   4. Extract relocation data for overlay sections
+#
+# The main code section spans from entry point to overlay load area.
+# All 19 overlays load to VRAM 0x802C5800 (mutually exclusive).
+
+# =============================================================================
+# Main code section (placeholder - needs function enumeration)
+# =============================================================================
+[[section]]
+rom = 0x00001000
+vram = 0x80000400
+size = 0x001B1FB0    # From ROM start to first overlay
+name = ".text"
+
+# TODO: Populate with all functions from symbol_addrs.txt and libultra_symbols.txt
+# Example entries:
+# [[section.functions]]
+# name = "main_thread"
+# vram = 0x80047530
+# size = 0x100  # Must be determined from decomp
+
+# =============================================================================
+# Overlay sections (all load to VRAM 0x802C5800, relocatable)
+# =============================================================================
+
+# NOTE: Each overlay section below needs:
+# 1. Functions enumerated from ovl_symbols.txt and decomp source
+# 2. Relocation entries extracted from the ROM or ELF
+# Size = romEnd - romStart for each overlay
+
+[[section]]
+rom = 0x001B1FB0
+vram = 0x802C5800
+size = 0x7F10       # 0x1B3EC0 - 0x1B1FB0 = segment_1B1FB0
+name = ".segment_1B1FB0"
+
+[[section]]
+rom = 0x001B3EC0
+vram = 0x802C5800
+size = 0x16E0       # ovl_i0
+name = ".ovl_i0"
+
+[[section]]
+rom = 0x001B9440
+vram = 0x802C5800
+size = 0x3450       # ovl_i2
+name = ".ovl_i2"
+
+[[section]]
+rom = 0x001BC890
+vram = 0x802C5800
+size = 0x1820       # ovl_i3
+name = ".ovl_i3"
+
+[[section]]
+rom = 0x001BE0B0
+vram = 0x802C5800
+size = 0x1EA0       # ovl_i4
+name = ".ovl_i4"
+
+[[section]]
+rom = 0x001BFF50
+vram = 0x802C5800
+size = 0x2300       # ovl_i5
+name = ".ovl_i5"
+
+[[section]]
+rom = 0x001C3D00
+vram = 0x802C5800
+size = 0x06F0       # seg_1C3D00
+name = ".seg_1C3D00"
+
+[[section]]
+rom = 0x001C2250
+vram = 0x802C5800
+size = 0x1530       # ovl_i6
+name = ".ovl_i6"
+
+[[section]]
+rom = 0x001C3780
+vram = 0x802C5800
+size = 0x0580       # seg_1C3780
+name = ".seg_1C3780"
+
+[[section]]
+rom = 0x001C43F0
+vram = 0x802C5800
+size = 0x05B0       # ovl_i7
+name = ".ovl_i7"
+
+[[section]]
+rom = 0x001C49A0
+vram = 0x802C5800
+size = 0x1D30       # ovl_i8
+name = ".ovl_i8"
+
+[[section]]
+rom = 0x001C66D0
+vram = 0x802C5800
+size = 0x2A80       # ovl_i9
+name = ".ovl_i9"
+
+[[section]]
+rom = 0x001C9150
+vram = 0x802C5800
+size = 0x1330       # ovl_i10
+name = ".ovl_i10"
+
+[[section]]
+rom = 0x001CA480
+vram = 0x802C5800
+size = 0x09C0       # ovl_i11
+name = ".ovl_i11"
+
+[[section]]
+rom = 0x001CAE40
+vram = 0x802C5800
+size = 0x0CB0       # ovl_i12
+name = ".ovl_i12"
+
+[[section]]
+rom = 0x001CBAF0
+vram = 0x802C5800
+size = 0x3690       # ovl_i13
+name = ".ovl_i13"
+
+[[section]]
+rom = 0x001CF180
+vram = 0x802C5800
+size = 0x09E0       # ovl_i14
+name = ".ovl_i14"
+
+[[section]]
+rom = 0x001CFB60
+vram = 0x802C5800
+size = 0x1670       # ovl_i15
+name = ".ovl_i15"
+
+[[section]]
+rom = 0x001B55A0
+vram = 0x802C5800
+size = 0x3EA0       # ovl_i1
+name = ".ovl_i1"
