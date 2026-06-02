@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <cstdint>
 #include <string>
+#include <thread>
+#include <chrono>
 
 #include "librecomp/game.hpp"
 #include "librecomp/overlays.hpp"
@@ -182,7 +184,22 @@ static void vi_callback() {
 }
 
 static void gfx_init_callback() {
-    // Called when the graphics subsystem is initialized.
+    // Called when the graphics subsystem is fully initialized.
+    // We launch a detached thread that waits for the VI thread to complete
+    // several dummy-VI iterations (populating both ViState slots) before
+    // calling start_game(). Calling start_game() immediately here would race
+    // with the VI thread: update_vi() dereferences next_state->mode which is
+    // null until set_dummy_vi() has run at least once in the VI thread.
+    std::thread([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::u8string game_id = u8"waverace64";
+        if (recomp::is_rom_valid(game_id)) {
+            printf("[WR64] ROM validated, starting game...\n");
+            recomp::start_game(game_id);
+        } else {
+            fprintf(stderr, "[WR64] ERROR: ROM not valid at startup (check waverace64.z64 in CWD)\n");
+        }
+    }).detach();
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +328,8 @@ int main(int argc, char* argv[]) {
     };
 
     printf("[WR64] Starting recomp runtime...\n");
+    // Anchor config path to CWD so saves, mods, and ROM cache resolve correctly.
+    recomp::register_config_path(std::filesystem::current_path());
     recomp::start(config);
 
     // Cleanup
