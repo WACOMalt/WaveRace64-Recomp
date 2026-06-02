@@ -18,6 +18,34 @@
 #include "hle/rt64_application.h"
 
 // ---------------------------------------------------------------------------
+// Static dummy buffers required by RT64 (must persist for the lifetime of app)
+// ---------------------------------------------------------------------------
+
+// ROM header placeholder — RT64 reads the first 0x40 bytes for cartridge info.
+// We don't need real header data for HLE rendering.
+static uint8_t s_dummy_rom_header[0x40] = {};
+
+// SP DMEM/IMEM — RT64's RSP HLE doesn't use these but the core struct must be
+// non-null to avoid null-dereferences inside RT64's state setup paths.
+static uint8_t s_DMEM[0x1000] = {};
+static uint8_t s_IMEM[0x1000] = {};
+
+// RDP / MI register storage — RT64 may read/write these during HLE rendering.
+// Providing real zero-initialised storage prevents nullptr dereferences.
+static unsigned int s_MI_INTR_REG     = 0;
+static unsigned int s_DPC_START_REG   = 0;
+static unsigned int s_DPC_END_REG     = 0;
+static unsigned int s_DPC_CURRENT_REG = 0;
+static unsigned int s_DPC_STATUS_REG  = 0;
+static unsigned int s_DPC_CLOCK_REG   = 0;
+static unsigned int s_DPC_BUFBUSY_REG = 0;
+static unsigned int s_DPC_PIPEBUSY_REG= 0;
+static unsigned int s_DPC_TMEM_REG    = 0;
+
+// No-op interrupt check — the recompiler runtime handles interrupts itself.
+static void dummy_check_interrupts() {}
+
+// ---------------------------------------------------------------------------
 // RT64 RendererContext subclass
 // ---------------------------------------------------------------------------
 
@@ -32,16 +60,27 @@ public:
         // The RDRAM pointer is the base of the emulated N64 memory.
         core.RDRAM = rdram;
 
-        // N64 ROM header sits at the start of RDRAM in the recompiler's memory layout.
-        // The header is the first 0x40 bytes of the ROM, copied to RDRAM by the IPL.
-        core.HEADER = rdram;
+        // Use the static dummy header — real ROM header bytes are not needed for HLE.
+        core.HEADER = s_dummy_rom_header;
 
-        // DMEM and IMEM are at fixed offsets within the SP memory space.
-        // In the recompiler, these are at 0x04000000 and 0x04001000 respectively,
-        // mapped relative to RDRAM with a fixed offset.
-        // For now, set to nullptr — RT64 doesn't use them for HLE rendering.
-        core.DMEM = nullptr;
-        core.IMEM = nullptr;
+        // DMEM/IMEM must be non-null; RT64 may reference them during state init.
+        core.DMEM = s_DMEM;
+        core.IMEM = s_IMEM;
+
+        // Wire up a no-op interrupt callback. The ultramodern runtime owns
+        // interrupt delivery; RT64 does not need to trigger them directly.
+        core.checkInterrupts = dummy_check_interrupts;
+
+        // RDP / MI registers — provide real storage so RT64 can read/write safely.
+        core.MI_INTR_REG      = &s_MI_INTR_REG;
+        core.DPC_START_REG    = &s_DPC_START_REG;
+        core.DPC_END_REG      = &s_DPC_END_REG;
+        core.DPC_CURRENT_REG  = &s_DPC_CURRENT_REG;
+        core.DPC_STATUS_REG   = &s_DPC_STATUS_REG;
+        core.DPC_CLOCK_REG    = &s_DPC_CLOCK_REG;
+        core.DPC_BUFBUSY_REG  = &s_DPC_BUFBUSY_REG;
+        core.DPC_PIPEBUSY_REG = &s_DPC_PIPEBUSY_REG;
+        core.DPC_TMEM_REG     = &s_DPC_TMEM_REG;
 
         // VI register pointers: RT64 reads these from RDRAM to determine framebuffer.
         // The ultramodern runtime sets up VI registers at known addresses.
@@ -62,37 +101,28 @@ public:
         core.VI_X_SCALE_REG         = &vi_regs->VI_X_SCALE_REG;
         core.VI_Y_SCALE_REG         = &vi_regs->VI_Y_SCALE_REG;
 
-        // DPC registers — not strictly needed for basic HLE, but RT64 references them.
-        // Set to nullptr for now; advanced RDP integration would fill these in.
-        core.DPC_START_REG   = nullptr;
-        core.DPC_END_REG     = nullptr;
-        core.DPC_CURRENT_REG = nullptr;
-        core.DPC_STATUS_REG  = nullptr;
-        core.DPC_CLOCK_REG   = nullptr;
-        core.DPC_BUFBUSY_REG = nullptr;
-        core.DPC_PIPEBUSY_REG = nullptr;
-        core.DPC_TMEM_REG    = nullptr;
-        core.MI_INTR_REG     = nullptr;
-        core.checkInterrupts = nullptr;
-
         // Set up the SDL window for RT64.
-        // On Linux with SDL2, WindowHandle is SDL_Window* (a typedef, not a struct).
-        // RenderWindow is also typedef'd to SDL_Window* by plume.
 #if defined(_WIN32)
-        core.window = reinterpret_cast<RenderWindow>(window_handle.window);
+        core.window = window_handle.window;
 #elif defined(__APPLE__)
-        core.window = reinterpret_cast<RenderWindow>(window_handle.window);
+        core.window.window = window_handle.window;
+        core.window.view   = window_handle.view;
 #else
-        // Linux: WindowHandle IS SDL_Window*
+        // Linux / Android: WindowHandle IS SDL_Window*
         core.window = window_handle;
 #endif
 
         // Configure the RT64 application.
         RT64::ApplicationConfiguration app_config{};
         app_config.appId = "waverace64";
+        // Disable config file I/O — we manage settings ourselves.
+        app_config.useConfigurationFile = false;
 
         // Create the RT64 application.
         app_ = std::make_unique<RT64::Application>(core, app_config);
+
+        // Enable developer/debug mode if requested.
+        app_->userConfig.developerMode = developer_mode;
 
         // Attempt setup.
         auto result = app_->setup(0);
@@ -115,12 +145,29 @@ public:
                 break;
         }
 
-        // Set the chosen graphics API.
-        // RT64 uses its own GraphicsAPI enum — map to ultramodern's.
-        // Default to Vulkan on Linux.
-        chosen_api = ultramodern::renderer::GraphicsApi::Vulkan;
+        if (result != RT64::Application::SetupResult::Success) {
+            app_.reset();
+            return;
+        }
 
-        printf("[WR64-RT64] Renderer context created (result=%d)\n", static_cast<int>(result));
+        // Map the API that RT64 actually chose.
+        switch (app_->chosenGraphicsAPI) {
+            case RT64::UserConfiguration::GraphicsAPI::D3D12:
+                chosen_api = ultramodern::renderer::GraphicsApi::D3D12;
+                break;
+            case RT64::UserConfiguration::GraphicsAPI::Vulkan:
+                chosen_api = ultramodern::renderer::GraphicsApi::Vulkan;
+                break;
+            case RT64::UserConfiguration::GraphicsAPI::Metal:
+                chosen_api = ultramodern::renderer::GraphicsApi::Metal;
+                break;
+            default:
+                chosen_api = ultramodern::renderer::GraphicsApi::Vulkan;
+                break;
+        }
+
+        printf("[WR64-RT64] Renderer context created (result=%d, api=%d)\n",
+               static_cast<int>(result), static_cast<int>(chosen_api));
     }
 
     ~RT64Context() override {
@@ -142,22 +189,46 @@ public:
     }
 
     void enable_instant_present() override {
-        // TODO: Configure RT64 for instant present mode (reduces latency).
+        if (!app_) return;
+        // Enable present-early mode for minimal latency (matches reference).
+        app_->enhancementConfig.presentation.mode =
+            RT64::EnhancementConfiguration::Presentation::Mode::PresentEarly;
+        app_->updateEnhancementConfig();
     }
 
     void send_dl(const OSTask* task) override {
         if (!app_) return;
 
-        // Extract display list start and end addresses from the OSTask.
-        uint32_t dl_start = task->t.data_ptr;
-        uint32_t dl_end   = task->t.data_ptr + task->t.data_size;
+        // task->t.ucode / ucode_data / data_ptr are PTR(u64) = int32_t holding
+        // N64 KSEG0 virtual addresses (e.g. 0x80XXXXXX).
+        // RT64 expects physical byte offsets into the RDRAM buffer.
+        // Masking with 0x3FFFFFF strips the KSEG0/KSEG1 high bits and gives
+        // the physical address within the N64's 64MB address space.
+        uint32_t ucode_phys      = static_cast<uint32_t>(task->t.ucode)      & 0x3FFFFFFu;
+        uint32_t ucode_data_phys = static_cast<uint32_t>(task->t.ucode_data) & 0x3FFFFFFu;
+        uint32_t dl_start_phys   = static_cast<uint32_t>(task->t.data_ptr)   & 0x3FFFFFFu;
 
+        fprintf(stderr, "[WR64-RT64] send_dl: ucode=0x%07X ucode_data=0x%07X data_ptr=0x%07X\n",
+                ucode_phys, ucode_data_phys, dl_start_phys);
+
+        // Reset the RSP state machine before processing each new display list.
+        // This prevents prior-frame geometry or matrix state from leaking.
+        app_->state->rsp->reset();
+
+        // Tell the HLE interpreter which GBI microcode variant to use.
+        // This must be called before processDisplayLists() or hleGBI will be null.
+        app_->interpreter->loadUCodeGBI(ucode_phys, ucode_data_phys, true);
+
+        // Process the display list. Pass 0 for dlEndAddress — RT64 will walk
+        // the list until it encounters a G_ENDDL command.
         app_->processDisplayLists(
-            const_cast<uint8_t*>(app_->core.RDRAM),
-            dl_start,
-            dl_end,
+            app_->core.RDRAM,
+            dl_start_phys,
+            0,    // end address: 0 means walk until G_ENDDL
             true  // HLE mode
         );
+
+        fprintf(stderr, "[WR64-RT64] send_dl: DONE\n");
     }
 
     void update_screen() override {
@@ -174,8 +245,10 @@ public:
     }
 
     uint32_t get_display_framerate() const override {
-        // Wave Race 64 targets 30fps (NTSC).
-        // TODO: Query actual display refresh rate from RT64.
+        if (app_ && app_->presentQueue) {
+            return app_->presentQueue->ext.sharedResources->swapChainRate;
+        }
+        // Wave Race 64 targets 30fps (NTSC) — use as fallback.
         return 30;
     }
 
