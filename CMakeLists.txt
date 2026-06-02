@@ -71,6 +71,7 @@ set(WR64_SOURCES
     src/rsp_microcode.cpp
     src/audio.cpp
     src/input.cpp
+    src/os_stubs.cpp
 )
 
 add_executable(WaveRace64Recomp ${WR64_SOURCES})
@@ -89,17 +90,30 @@ target_include_directories(WaveRace64Recomp PRIVATE
 if (BUILD_RT64)
     target_include_directories(WaveRace64Recomp PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/lib/rt64/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/rt64/src/contrib"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/rt64/src/contrib/hlslpp/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/rt64/src/contrib/plume"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/rt64/src/contrib/imgui"
+        "${CMAKE_CURRENT_SOURCE_DIR}/lib/rt64/src/contrib/mupen64plus-core/src/api"
     )
-    target_compile_definitions(WaveRace64Recomp PRIVATE HAS_RT64=1)
+    target_compile_definitions(WaveRace64Recomp PRIVATE HAS_RT64=1 HLSL_CPU FFX_GCC)
 endif()
 
 # Link libraries
+# Use --start-group/--end-group to handle circular dependencies between
+# recomp_funcs (which references librecomp symbols) and librecomp (which
+# needs function tables from recomp_funcs).
 target_link_libraries(WaveRace64Recomp PRIVATE
+    -Wl,--start-group
+    recomp_funcs
     librecomp
     ultramodern
-    recomp_funcs
+    -Wl,--end-group
     SDL2::SDL2
 )
+
+# Allow multiple definitions (e.g. guMtxF2L appears in multiple overlay sections)
+target_link_options(WaveRace64Recomp PRIVATE -Wl,--allow-multiple-definition)
 
 if (BUILD_RT64)
     target_link_libraries(WaveRace64Recomp PRIVATE rt64)

@@ -198,7 +198,8 @@ static void error_message_box(const char* msg) {
 // ---------------------------------------------------------------------------
 // Threads callback
 // ---------------------------------------------------------------------------
-static std::string get_game_thread_name(int id) {
+static std::string get_game_thread_name(const OSThread* t) {
+    int id = t ? static_cast<int>(t->id) : -1;
     switch (id) {
         case 1: return "WR64 Idle";
         case 3: return "WR64 Main";

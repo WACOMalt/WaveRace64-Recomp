@@ -5,7 +5,7 @@
 entrypoint = 0x80046800
 # Paths are relative to the location of this config file.
 output_func_path = "../RecompiledFuncs"
-relocatable_sections_path = "overlays.us.rev1.txt"
+# relocatable_sections_path = "overlays.us.rev1.txt"
 
 # Two input modes are supported by N64Recomp:
 #   1. ELF mode: provide an ELF from a decomp build (elf_path)

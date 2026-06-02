@@ -76,12 +76,15 @@ public:
         core.checkInterrupts = nullptr;
 
         // Set up the SDL window for RT64.
-#if defined(__linux__) || defined(__ANDROID__)
-        core.window = RT64::RenderWindow(window_handle);
-#elif defined(_WIN32)
-        core.window = RT64::RenderWindow(window_handle.window);
+        // On Linux with SDL2, WindowHandle is SDL_Window* (a typedef, not a struct).
+        // RenderWindow is also typedef'd to SDL_Window* by plume.
+#if defined(_WIN32)
+        core.window = reinterpret_cast<RenderWindow>(window_handle.window);
 #elif defined(__APPLE__)
-        core.window = RT64::RenderWindow(window_handle.window, window_handle.view);
+        core.window = reinterpret_cast<RenderWindow>(window_handle.window);
+#else
+        // Linux: WindowHandle IS SDL_Window*
+        core.window = window_handle;
 #endif
 
         // Configure the RT64 application.
